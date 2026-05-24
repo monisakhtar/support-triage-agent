@@ -15,6 +15,7 @@ from fastapi import Depends, FastAPI
 from pydantic import BaseModel
 
 from triage_agent.config import Settings, get_settings
+import uvicorn
 
 
 # ---------------------------------------------------------------------------
@@ -109,3 +110,18 @@ async def root() -> dict[str, str]:
         "health": "/health",
         "tagline": "agents need async", 
     }
+
+def run() -> None:
+    """Boot the development server."""
+
+    uvicorn.run(
+        "triage_agent.main:app",
+        host="127.0.0.1",
+        port=8000,
+        reload=True,
+        log_level="info",
+    )
+
+
+if __name__ == "__main__":
+    run()

@@ -1,8 +1,11 @@
 """LLM provider abstraction package.
 
-Re-exports the public API so callers can do:
+The public API for callers:
 
-    from triage_agent.llm import LLMProvider, OllamaProvider, OpenAIProvider
+    from triage_agent.llm import build_llm_provider, LLMProvider
+
+    provider = build_llm_provider()
+    response = await provider.chat([{"role": "user", "content": "hi"}])
 """
 
 from triage_agent.llm.base import (
@@ -14,6 +17,7 @@ from triage_agent.llm.base import (
     ToolCall,
     ToolSchema,
 )
+from triage_agent.llm.factory import build_llm_provider
 from triage_agent.llm.ollama_client import OllamaProvider
 from triage_agent.llm.openai_client import OpenAIProvider
 
@@ -27,4 +31,5 @@ __all__ = [
     "TokenUsage",
     "ToolCall",
     "ToolSchema",
+    "build_llm_provider",
 ]
