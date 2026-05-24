@@ -21,3 +21,8 @@ build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/triage_agent"]
+
+[dependency-groups]
+ui = [
+    "streamlit>=1.57.0",
+]
