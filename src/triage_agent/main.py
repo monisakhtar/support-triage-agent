@@ -13,11 +13,14 @@ Run locally with:
 from contextlib import asynccontextmanager
 from typing import Annotated, AsyncIterator
 
-from fastapi import Depends, FastAPI, Request
+from fastapi import Depends, FastAPI, Request, HTTPException
 from pydantic import BaseModel
 
 from triage_agent.config import Settings, get_settings
 from triage_agent.llm import LLMProvider, build_llm_provider
+from triage_agent.agents.loop import MaxIterationsExceeded, AgentError
+from triage_agent.agents.triage import triage_ticket
+from triage_agent.agents.types import Ticket, TriageResponse
 
 
 # ---------------------------------------------------------------------------
@@ -129,6 +132,18 @@ async def llm_ping(llm: LLMDep) -> dict[str, str]:
         "tokens": str(response.usage.total_tokens),
     }
 
+@app.post("/triage", response_model=TriageResponse)
+async def triage(ticket: Ticket, llm: LLMDep) -> TriageResponse:
+    """Triage a support ticket via the agent loop."""
+    try:
+        return await triage_ticket(ticket=ticket, llm=llm)
+    except MaxIterationsExceeded as exc:
+        raise HTTPException(
+            status_code=504,  # Gateway Timeout — semantic match for "agent didn't converge"
+            detail=f"Agent did not converge: {exc}",
+        )
+    except AgentError as exc:
+        raise HTTPException(status_code=500, detail=f"Agent error: {exc}")
 
 # ---------------------------------------------------------------------------
 # Local development entry point
