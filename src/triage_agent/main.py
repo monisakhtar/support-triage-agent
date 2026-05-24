@@ -5,27 +5,24 @@ Larger applications split routes into multiple router modules; this one is
 small enough to keep everything in one file for now.
 
 Run locally with:
+    uv run serve
+    # or
     uvicorn triage_agent.main:app --reload --port 8000
 """
 
 from contextlib import asynccontextmanager
 from typing import Annotated, AsyncIterator
 
-from fastapi import Depends, FastAPI
+from fastapi import Depends, FastAPI, Request
 from pydantic import BaseModel
 
 from triage_agent.config import Settings, get_settings
-import uvicorn
+from triage_agent.llm import LLMProvider, build_llm_provider
 
 
 # ---------------------------------------------------------------------------
 # Response models
 # ---------------------------------------------------------------------------
-# These Pydantic models describe the *shape* of our HTTP responses.
-# FastAPI uses them to:
-#   - Serialize the return value into JSON
-#   - Validate the response matches the declared shape
-#   - Generate the OpenAPI schema visible at /docs
 
 
 class HealthResponse(BaseModel):
@@ -40,26 +37,33 @@ class HealthResponse(BaseModel):
 # ---------------------------------------------------------------------------
 # Lifespan: startup & shutdown
 # ---------------------------------------------------------------------------
-# An async context manager that runs once at app boot (before `yield`) and
-# once at shutdown (after `yield`). This is where we'd open DB pools, warm
-# caches, or connect to message brokers. Right now we just read settings to
-# fail fast if config is broken.
+# Build the LLM provider once at startup, store it on app.state, close it
+# cleanly on shutdown. Endpoints access it via the get_llm dependency.
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """App startup and shutdown hooks."""
     settings = get_settings()
-    print(f"[startup] env={settings.app.env} provider={settings.llm.provider.value} model={settings.llm.model}")
-    yield
-    print("[shutdown] bye")
+    print(
+        f"[startup] env={settings.app.env} "
+        f"provider={settings.llm.provider.value} "
+        f"model={settings.llm.model}"
+    )
+
+    llm = build_llm_provider()
+    app.state.llm = llm
+
+    try:
+        yield
+    finally:
+        await llm.close()
+        print("[shutdown] bye")
 
 
 # ---------------------------------------------------------------------------
 # The app itself
 # ---------------------------------------------------------------------------
-# FastAPI() builds the ASGI application. Title and description show up in
-# the auto-generated /docs page.
 
 
 app = FastAPI(
@@ -71,13 +75,17 @@ app = FastAPI(
 
 
 # ---------------------------------------------------------------------------
-# Typed dependency alias
+# Dependencies
 # ---------------------------------------------------------------------------
-# `Annotated[Settings, Depends(get_settings)]` says: "this parameter is of
-# type Settings, and FastAPI should obtain it by calling get_settings()."
-# Defining the alias once keeps handler signatures readable.
+
+
+def get_llm(request: Request) -> LLMProvider:
+    """Retrieve the singleton LLM provider stored on app.state."""
+    return request.app.state.llm
+
 
 SettingsDep = Annotated[Settings, Depends(get_settings)]
+LLMDep = Annotated[LLMProvider, Depends(get_llm)]
 
 
 # ---------------------------------------------------------------------------
@@ -87,12 +95,7 @@ SettingsDep = Annotated[Settings, Depends(get_settings)]
 
 @app.get("/health", response_model=HealthResponse)
 async def health(settings: SettingsDep) -> HealthResponse:
-    """Liveness + config sanity probe.
-
-    Returns the current environment and which LLM provider is wired up.
-    Useful in CI/CD: if /health responds with the wrong provider, the
-    deployment is misconfigured.
-    """
+    """Liveness + config sanity probe."""
     return HealthResponse(
         status="ok",
         env=settings.app.env,
@@ -103,16 +106,38 @@ async def health(settings: SettingsDep) -> HealthResponse:
 
 @app.get("/")
 async def root() -> dict[str, str]:
-    """Friendly landing message for humans hitting the root URL in a browser."""
+    """Friendly landing message for humans."""
     return {
         "service": "support-triage-agent",
         "docs": "/docs",
         "health": "/health",
-        "tagline": "agents need async", 
+        "llm_ping": "/llm/ping",
     }
+
+
+@app.get("/llm/ping")
+async def llm_ping(llm: LLMDep) -> dict[str, str]:
+    """Sanity-check endpoint: do a one-shot chat with the active LLM."""
+    response = await llm.chat(
+        messages=[{"role": "user", "content": "Reply with the single word PONG."}],
+        max_tokens=10,
+    )
+    return {
+        "provider": llm.name,
+        "model": llm.model,
+        "reply": response.content.strip(),
+        "tokens": str(response.usage.total_tokens),
+    }
+
+
+# ---------------------------------------------------------------------------
+# Local development entry point
+# ---------------------------------------------------------------------------
+
 
 def run() -> None:
     """Boot the development server."""
+    import uvicorn
 
     uvicorn.run(
         "triage_agent.main:app",
