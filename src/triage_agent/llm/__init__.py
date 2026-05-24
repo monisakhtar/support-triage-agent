@@ -2,7 +2,7 @@
 
 Re-exports the public API so callers can do:
 
-    from triage_agent.llm import LLMProvider, ChatResponse, ToolCall
+    from triage_agent.llm import LLMProvider, OllamaProvider, ChatResponse
 """
 
 from triage_agent.llm.base import (
@@ -14,11 +14,13 @@ from triage_agent.llm.base import (
     ToolCall,
     ToolSchema,
 )
+from triage_agent.llm.ollama_client import OllamaProvider
 
 __all__ = [
     "ChatResponse",
     "LLMProvider",
     "Message",
+    "OllamaProvider",
     "Role",
     "TokenUsage",
     "ToolCall",
