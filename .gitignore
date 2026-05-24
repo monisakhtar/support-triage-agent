@@ -1,10 +1,52 @@
+# ============================================================
 # Python-generated files
+# ============================================================
 __pycache__/
 *.py[oc]
 build/
 dist/
 wheels/
 *.egg-info
+*.egg
 
+# ============================================================
 # Virtual environments
-.venv
+# ============================================================
+.venv/
+venv/
+env/
+
+# ============================================================
+# Environment / secrets
+# Never commit these — they contain API keys and per-machine config
+# ============================================================
+.env
+.env.local
+.env.*.local
+*.secret
+
+# ============================================================
+# Test & lint caches
+# ============================================================
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
+
+# ============================================================
+# Local databases & data files
+# We use Postgres in containers, not local SQLite
+# ============================================================
+*.db
+*.sqlite
+*.sqlite3
+data/
+logs/
+*.log
+
+# ============================================================
+# OS-specific cruft
+# =================
